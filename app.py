@@ -77,6 +77,7 @@ def list_available_models(api_key):
     except Exception as e:
         print(f"Error listing models: {e}")
         print("Ensure your API key is valid and that you have access to the Gemini API.")
+        st.error("API KEY IS : ", api_key)
         st.error("Failed to list available models. Check your API key and console for details.")
         return False # Indicate failure to list models
     return True # Indicate success
