@@ -75,9 +75,9 @@ def list_available_models(api_key):
         # Access the models directly through the configured genai object.
         for model in genai.list_models():
             if 'generateContent' in model.supported_generation_methods:
-                print(f"- {model.name}: {model.description}")
+                st.info(f"- {model.name}: {model.description}")
             else:
-                print(f"- {model.name}: {model.description} (Does not support generateContent)")
+                st.info(f"- {model.name}: {model.description} (Does not support generateContent)")
 
     except Exception as e:
         print(f"Error listing models: {e}")
