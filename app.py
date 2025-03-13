@@ -67,22 +67,22 @@ def get_conversational_chain():
 
 
 
-def list_available_models(api_key):
-    """Lists available models using the GoogleGenerativeAI class."""
-    try:
-        # Access the models directly through the configured genai object.
-        for model in genai.list_models():
-            if 'generateContent' in model.supported_generation_methods:
-                st.info(f"- {model.name}: {model.description}")
-            else:
-                st.info(f"- {model.name}: {model.description} (Does not support generateContent)")
+# def list_available_models(api_key):
+#     """Lists available models using the GoogleGenerativeAI class."""
+#     try:
+#         # Access the models directly through the configured genai object.
+#         for model in genai.list_models():
+#             if 'generateContent' in model.supported_generation_methods:
+#                 st.info(f"- {model.name}: {model.description}")
+#             else:
+#                 st.info(f"- {model.name}: {model.description} (Does not support generateContent)")
 
-    except Exception as e:
-        print(f"Error listing models: {e}")
-        print("Ensure your API key is valid and that you have access to the Gemini API.")
-        st.error(f"Failed to list available models. Check your API key and console for details: {e}")
-        return False # Indicate failure to list models
-    return True # Indicate success
+#     except Exception as e:
+#         print(f"Error listing models: {e}")
+#         print("Ensure your API key is valid and that you have access to the Gemini API.")
+#         st.error(f"Failed to list available models. Check your API key and console for details: {e}")
+#         return False # Indicate failure to list models
+#     return True # Indicate success
     
 
 def clear_chat_history():
@@ -142,8 +142,8 @@ def main():
 
     if prompt := st.chat_input():
         #First list available models
-        if not list_available_models(api_key):
-            st.stop() 
+        # if not list_available_models(api_key):
+        #     st.stop() 
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.write(prompt)
