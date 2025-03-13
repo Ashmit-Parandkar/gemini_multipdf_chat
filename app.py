@@ -69,7 +69,7 @@ def get_conversational_chain():
 def list_available_models(api_key):
     """Lists available models using the GoogleGenerativeAI class."""
     try:
-        st.info("Getting available LLM Models...")
+        st.info("Getting available LLM Models...", api_key)
         # Initialize with a model name and pass the api_key to the genai client
         llm = GoogleGenerativeAI(model="gemini-pro", client=genai) # Use 'gemini-pro' or another default model
         st.info("LLM Object : ", llm)
