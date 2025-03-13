@@ -69,16 +69,17 @@ def get_conversational_chain():
 def list_available_models(api_key):
     """Lists available models using the GoogleGenerativeAI class."""
     try:
-        llm = GoogleGenerativeAI(google_api_key=api_key) # Initialize with the API key
-        models = llm.client.list_models()  # Access the underlying API client
-        print("Available models:")
+        st.info("Getting available LLM Models...")
+        # Initialize with a model name and pass the api_key to the genai client
+        llm = GoogleGenerativeAI(model="gemini-pro", client=genai) # Use 'gemini-pro' or another default model
+        st.info("LLM Object : ", llm)
+        models = genai.generative_models
         for model in models:
             print(f"- {model.name}: {model.description}")
     except Exception as e:
         print(f"Error listing models: {e}")
         print("Ensure your API key is valid and that you have access to the Gemini API.")
-        st.error("API KEY IS : ", api_key)
-        st.error("Failed to list available models. Check your API key and console for details.")
+        st.error(f"Failed to list available models. Check your API key and console for details: {e}")
         return False # Indicate failure to list models
     return True # Indicate success
 
