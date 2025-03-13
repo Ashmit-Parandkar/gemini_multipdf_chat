@@ -66,23 +66,26 @@ def get_conversational_chain():
     return chain
 
 
+
 def list_available_models(api_key):
     """Lists available models using the GoogleGenerativeAI class."""
     try:
         st.info(f"Getting available LLM Models...{api_key}")
-        # Initialize with a model name and pass the api_key to the genai client
-        llm = GoogleGenerativeAI(model="gemini-pro", client=genai) # Use 'gemini-pro' or another default model
-        st.info("LLM Object : ", llm)
-        models = genai.generative_models
-        for model in models:
-            print(f"- {model.name}: {model.description}")
+        st.info(f"Getting available LLM Models...{dir(genai)}")
+        # Access the models directly through the configured genai object.
+        for model in genai.list_models():
+            if 'generateContent' in model.supported_generation_methods:
+                print(f"- {model.name}: {model.description}")
+            else:
+                print(f"- {model.name}: {model.description} (Does not support generateContent)")
+
     except Exception as e:
         print(f"Error listing models: {e}")
         print("Ensure your API key is valid and that you have access to the Gemini API.")
         st.error(f"Failed to list available models. Check your API key and console for details: {e}")
         return False # Indicate failure to list models
     return True # Indicate success
-
+    
 
 def clear_chat_history():
     st.session_state.messages = [
