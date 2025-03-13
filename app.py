@@ -70,8 +70,6 @@ def get_conversational_chain():
 def list_available_models(api_key):
     """Lists available models using the GoogleGenerativeAI class."""
     try:
-        st.info(f"Getting available LLM Models...{api_key}")
-        st.info(f"Getting available LLM Models...{dir(genai)}")
         # Access the models directly through the configured genai object.
         for model in genai.list_models():
             if 'generateContent' in model.supported_generation_methods:
