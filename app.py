@@ -4,8 +4,8 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 import streamlit as st
 import google.generativeai as genai
-from langchain.vectorstores import FAISS
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_community.vectorstores import FAISS
+from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAI
 from langchain.chains.question_answering import load_qa_chain
 from langchain.prompts import PromptTemplate
 from dotenv import load_dotenv
@@ -64,6 +64,22 @@ def get_conversational_chain():
     return chain
 
 
+def list_available_models(api_key):
+    """Lists available models using the GoogleGenerativeAI class."""
+    try:
+        llm = GoogleGenerativeAI(google_api_key=api_key) # Initialize with the API key
+        models = llm.client.list_models()  # Access the underlying API client
+        print("Available models:")
+        for model in models:
+            print(f"- {model.name}: {model.description}")
+    except Exception as e:
+        print(f"Error listing models: {e}")
+        print("Ensure your API key is valid and that you have access to the Gemini API.")
+        st.error("Failed to list available models. Check your API key and console for details.")
+        return False # Indicate failure to list models
+    return True # Indicate success
+
+
 def clear_chat_history():
     st.session_state.messages = [
         {"role": "assistant", "content": "upload some pdfs and ask me a question"}]
@@ -120,6 +136,9 @@ def main():
             st.write(message["content"])
 
     if prompt := st.chat_input():
+        #First list available models
+        if not list_available_models(api_key):
+            st.stop() 
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.write(prompt)
