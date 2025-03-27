@@ -10,13 +10,8 @@ from langchain.chains.question_answering import load_qa_chain
 from langchain.prompts import PromptTemplate
 from dotenv import load_dotenv
 
-# For BLEU & ROUGE scoring
-import nltk
-from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
+# For ROUGE scoring
 from rouge_score import rouge_scorer
-
-# Make sure you have the relevant NLTK data installed:
-# nltk.download('punkt')  # if you see errors about missing tokenizers
 
 load_dotenv()
 
@@ -62,7 +57,7 @@ def get_conversational_chain():
     Context:
     {context}?
 
-    Question:
+    Question: 
     {question}
 
     Answer:
@@ -88,54 +83,38 @@ def user_input(user_question):
     embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")  # type: ignore
     new_db = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
 
-    # Retrieve documents WITH scores
+    # Retrieve top documents WITH scores
     docs_with_scores = new_db.similarity_search_with_score(user_question, k=4)
     if not docs_with_scores:
-        # If no docs are returned, just pass empty placeholders
-        return {"output_text": "No relevant context found"}, 0, 0, 0, 0
+        # If no docs come back, return placeholders
+        return {"output_text": "No relevant context found."}, 0, 0, 0
 
-    # Sort them ascending by distance (lowest distance = highest similarity)
+    # Sort them by distance (lowest distance = highest similarity)
     docs_with_scores.sort(key=lambda x: x[1])
 
-    # Separate out the docs from the scores
+    # Separate out the docs and scores
     docs = [item[0] for item in docs_with_scores]
     distances = [item[1] for item in docs_with_scores]
 
-    # Convert FAISS distances into a naive [0..1] similarity
-    # e.g. similarity = 1 / (1 + distance)
+    # Convert distances to a naive [0..1] similarity
     similarities = [1 / (1 + d) for d in distances]
 
+    # Run the chain
     chain = get_conversational_chain()
     response = chain({"input_documents": docs, "question": user_question},
                      return_only_outputs=True)
 
-    # Compute two basic "scoring metrics" from the retrieved docs
+    # Basic metrics: average & max similarity
     avg_similarity = sum(similarities) / len(similarities)
     max_similarity = max(similarities)
 
-    # Let's also compute BLEU & ROUGE vs. the single highest-similarity doc
-    # This is a naive approach to show overlap. 
+    # Compute ROUGE-1 for reference: the single best-matching doc chunk
     highest_sim_doc_text = docs_with_scores[0][0].page_content
-
-    # Convert doc text + response text to token lists
-    reference_tokens = nltk.word_tokenize(highest_sim_doc_text)
-    candidate_tokens = nltk.word_tokenize(response["output_text"])
-
-    # BLEU
-    # We pass a list of references = [reference_tokens], 
-    # plus candidate tokens. We use a small smoothing to avoid zero scores.
-    smoothie = SmoothingFunction().method1
-    bleu_score = sentence_bleu([reference_tokens], candidate_tokens, 
-                               smoothing_function=smoothie)
-
-    # ROUGE
-    # We'll measure ROUGE-1 and ROUGE-L (F1).
-    scorer = rouge_scorer.RougeScorer(["rouge1", "rougeL"], use_stemmer=True)
+    scorer = rouge_scorer.RougeScorer(["rouge1"], use_stemmer=True)
     rouge_scores = scorer.score(highest_sim_doc_text, response["output_text"])
-    rouge_1 = rouge_scores["rouge1"].fmeasure
-    rouge_l = rouge_scores["rougeL"].fmeasure
+    rouge_1_fmeasure = rouge_scores["rouge1"].fmeasure
 
-    return response, avg_similarity, max_similarity, bleu_score, rouge_1
+    return response, avg_similarity, max_similarity, rouge_1_fmeasure
 
 
 def main():
@@ -180,36 +159,34 @@ def main():
         with st.chat_message("user"):
             st.write(prompt)
 
-    # If the latest message is not from assistant, generate a new response
+    # Generate response if the latest message is not from assistant
     if st.session_state.messages[-1]["role"] != "assistant":
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
-                response, avg_score, max_score, bleu, rouge_1 = user_input(prompt)
+                response, avg_score, max_score, rouge_1 = user_input(prompt)
+
+                # Some API calls return response["output_text"] as a list; handle that:
+                raw_output = response["output_text"]
+                if isinstance(raw_output, list):
+                    raw_output = "".join(raw_output)
+
+                # Show response as it "streams" (basic character-by-character approach)
                 placeholder = st.empty()
                 full_response = ""
-
-                # response["output_text"] might be a string or a list of strings
-                # If it's a list of strings, let's join them
-                output_text = response["output_text"]
-                if isinstance(output_text, list):
-                    output_text = "".join(output_text)
-
-                # Show the assistant's text in "real-time" style
-                for ch in output_text:
+                for ch in raw_output:
                     full_response += ch
                     placeholder.markdown(full_response)
-                placeholder.markdown(full_response)
 
         if response is not None:
+            # Store the final response in session
             message = {"role": "assistant", "content": full_response}
             st.session_state.messages.append(message)
 
-            # Display the four metrics after the answer
+            # Display metrics
             st.write("---")
             st.metric(label="Average Similarity", value=round(avg_score, 3))
             st.metric(label="Max Similarity", value=round(max_score, 3))
-            st.metric(label="BLEU Score", value=round(bleu, 3))
-            st.metric(label="ROUGE-1 F1", value=round(rouge_1, 3))
+            st.metric(label="ROUGE-1 F1 Score", value=round(rouge_1, 3))
 
 
 if __name__ == "__main__":
