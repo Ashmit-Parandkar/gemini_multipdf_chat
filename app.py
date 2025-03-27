@@ -10,9 +10,6 @@ from langchain.chains.question_answering import load_qa_chain
 from langchain.prompts import PromptTemplate
 from dotenv import load_dotenv
 
-# For ROUGE scoring
-from rouge_score import rouge_scorer
-
 load_dotenv()
 
 api_key = os.getenv("GOOGLE_API_KEY")
@@ -35,7 +32,7 @@ def get_pdf_text(pdf_docs):
 # split text into chunks
 def get_text_chunks(text):
     splitter = RecursiveCharacterTextSplitter(
-        chunk_size=10000,
+        chunk_size=10000, 
         chunk_overlap=1000
     )
     chunks = splitter.split_text(text)
@@ -81,40 +78,30 @@ def clear_chat_history():
 
 def user_input(user_question):
     embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")  # type: ignore
-    new_db = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
+    new_db = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True) 
 
-    # Retrieve top documents WITH scores
+    # Retrieve documents WITH scores
     docs_with_scores = new_db.similarity_search_with_score(user_question, k=4)
     if not docs_with_scores:
-        # If no docs come back, return placeholders
-        return {"output_text": "No relevant context found."}, 0, 0, 0
+        # No relevant docs
+        return {"output_text": "No relevant context found."}, 0.0, 0.0
 
-    # Sort them by distance (lowest distance = highest similarity)
-    docs_with_scores.sort(key=lambda x: x[1])
-
-    # Separate out the docs and scores
+    # Separate out the docs from the scores
     docs = [item[0] for item in docs_with_scores]
     distances = [item[1] for item in docs_with_scores]
+    
+    # Convert FAISS distances into a "similarity" measure in [0..1] 
+    similarities = [1 / (1 + d) for d in distances] if distances else [0]
 
-    # Convert distances to a naive [0..1] similarity
-    similarities = [1 / (1 + d) for d in distances]
-
-    # Run the chain
     chain = get_conversational_chain()
     response = chain({"input_documents": docs, "question": user_question},
                      return_only_outputs=True)
 
-    # Basic metrics: average & max similarity
+    # Compute two basic "scoring metrics" from the retrieved docs
     avg_similarity = sum(similarities) / len(similarities)
     max_similarity = max(similarities)
 
-    # Compute ROUGE-1 for reference: the single best-matching doc chunk
-    highest_sim_doc_text = docs_with_scores[0][0].page_content
-    scorer = rouge_scorer.RougeScorer(["rouge1"], use_stemmer=True)
-    rouge_scores = scorer.score(highest_sim_doc_text, response["output_text"])
-    rouge_1_fmeasure = rouge_scores["rouge1"].fmeasure
-
-    return response, avg_similarity, max_similarity, rouge_1_fmeasure
+    return response, avg_similarity, max_similarity
 
 
 def main():
@@ -127,7 +114,7 @@ def main():
     with st.sidebar:
         st.title("Menu:")
         pdf_docs = st.file_uploader(
-            "Upload your PDF Files and Click on the Submit & Process Button",
+            "Upload your PDF Files and Click on the Submit & Process Button", 
             accept_multiple_files=True
         )
         if st.button("Submit & Process"):
@@ -153,40 +140,42 @@ def main():
         with st.chat_message(message["role"]):
             st.write(message["content"])
 
-    # Check for user input
+    # Wait for new user input
     if prompt := st.chat_input():
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.write(prompt)
 
-    # Generate response if the latest message is not from assistant
-    if st.session_state.messages[-1]["role"] != "assistant":
+    # If the latest message is user, generate a new assistant response
+    if st.session_state.messages[-1]["role"] == "user":
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
-                response, avg_score, max_score, rouge_1 = user_input(prompt)
+                response, avg_score, max_score = user_input(prompt)
 
-                # Some API calls return response["output_text"] as a list; handle that:
-                raw_output = response["output_text"]
+                # Convert output_text to a single string in case it's a list
+                raw_output = response.get("output_text", "")
                 if isinstance(raw_output, list):
                     raw_output = "".join(raw_output)
 
-                # Show response as it "streams" (basic character-by-character approach)
+                # Stream the text character by character
                 placeholder = st.empty()
                 full_response = ""
                 for ch in raw_output:
                     full_response += ch
                     placeholder.markdown(full_response)
 
-        if response is not None:
-            # Store the final response in session
-            message = {"role": "assistant", "content": full_response}
-            st.session_state.messages.append(message)
+            # Once finished, store assistant's entire text
+            st.session_state.messages.append({"role": "assistant", "content": full_response})
 
-            # Display metrics
+            # Now display metrics RIGHT here in the assistant's message bubble
             st.write("---")
-            st.metric(label="Average Similarity", value=round(avg_score, 3))
-            st.metric(label="Max Similarity", value=round(max_score, 3))
-            st.metric(label="ROUGE-1 F1 Score", value=round(rouge_1, 3))
+            st.write("**Similarity Metrics**")
+            # Show them as text:
+            st.write(f"- **Average Similarity Score**: {avg_score:.3f}")
+            st.write(f"- **Max Similarity Score**: {max_score:.3f}")
+            # Alternatively, you can also show them as st.metric:
+            # st.metric(label="Average Similarity Score", value=round(avg_score, 3))
+            # st.metric(label="Max Similarity Score", value=round(max_score, 3))
 
 
 if __name__ == "__main__":
