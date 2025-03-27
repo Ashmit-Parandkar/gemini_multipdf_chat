@@ -8,6 +8,7 @@ from langchain_community.vectorstores import FAISS
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAI
 from langchain.chains.question_answering import load_qa_chain
 from langchain.prompts import PromptTemplate
+from streamlit.logger import get_logger
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -18,6 +19,7 @@ if not api_key:
 
 genai.configure(api_key=api_key)
 
+logger = get_logger(__name__)
 
 # read all pdf files and return text
 def get_pdf_text(pdf_docs):
@@ -168,11 +170,15 @@ def main():
             st.session_state.messages.append({"role": "assistant", "content": full_response})
 
             # Now display metrics RIGHT here in the assistant's message bubble
-            st.write("---")
-            st.write("**Similarity Metrics**")
+            # st.write("---")
+            # st.write("**Similarity Metrics**")
             # Show them as text:
-            st.write(f"- **Average Similarity Score**: {avg_score:.3f}")
-            st.write(f"- **Max Similarity Score**: {max_score:.3f}")
+            # st.write(f"- **Average Similarity Score**: {avg_score:.3f}")
+            # st.write(f"- **Max Similarity Score**: {max_score:.3f}")
+
+            logger.info("**Similarity Metrics**")
+            logger.info(f"- **Average Similarity Score**: {avg_score:.3f}")
+            logger.info(f"- **Max Similarity Score**: {max_score:.3f}")
             # Alternatively, you can also show them as st.metric:
             # st.metric(label="Average Similarity Score", value=round(avg_score, 3))
             # st.metric(label="Max Similarity Score", value=round(max_score, 3))
