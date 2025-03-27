@@ -32,58 +32,44 @@ def get_pdf_text(pdf_docs):
 # split text into chunks
 def get_text_chunks(text):
     splitter = RecursiveCharacterTextSplitter(
-        chunk_size=10000, chunk_overlap=1000)
+        chunk_size=10000, 
+        chunk_overlap=1000
+    )
     chunks = splitter.split_text(text)
     return chunks  # list of strings
 
 
-
 # get embeddings for each chunk
 def get_vector_store(chunks):
-    embeddings = GoogleGenerativeAIEmbeddings(
-        model="models/embedding-001")  # type: ignore
+    embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")  # type: ignore
     vector_store = FAISS.from_texts(chunks, embedding=embeddings)
     vector_store.save_local("faiss_index")
 
 
 def get_conversational_chain():
     prompt_template = """
-    Answer the question as detailed as possible from the provided context, make sure to provide all the details, if the answer is not in
-    provided context just say, "answer is not available in the context", don't provide the wrong answer\n\n
-    Context:\n {context}?\n
-    Question: \n{question}\n
+    Answer the question as detailed as possible from the provided context, make sure to provide all the details.
+    If the answer is not in the provided context just say, "answer is not available in the context"; don't provide a wrong answer.
+
+    Context:
+    {context}?
+
+    Question: 
+    {question}
 
     Answer:
     """
 
-    model = ChatGoogleGenerativeAI(model="gemini-2.0-flash",
-                                   client=genai,
-                                   temperature=0.3,
-                                   )
+    model = ChatGoogleGenerativeAI(
+        model="gemini-2.0-flash",
+        client=genai,
+        temperature=0.3
+    )
     prompt = PromptTemplate(template=prompt_template,
                             input_variables=["context", "question"])
     chain = load_qa_chain(llm=model, chain_type="stuff", prompt=prompt)
     return chain
 
-
-
-# def list_available_models(api_key):
-#     """Lists available models using the GoogleGenerativeAI class."""
-#     try:
-#         # Access the models directly through the configured genai object.
-#         for model in genai.list_models():
-#             if 'generateContent' in model.supported_generation_methods:
-#                 st.info(f"- {model.name}: {model.description}")
-#             else:
-#                 st.info(f"- {model.name}: {model.description} (Does not support generateContent)")
-
-#     except Exception as e:
-#         print(f"Error listing models: {e}")
-#         print("Ensure your API key is valid and that you have access to the Gemini API.")
-#         st.error(f"Failed to list available models. Check your API key and console for details: {e}")
-#         return False # Indicate failure to list models
-#     return True # Indicate success
-    
 
 def clear_chat_history():
     st.session_state.messages = [
@@ -91,19 +77,28 @@ def clear_chat_history():
 
 
 def user_input(user_question):
-    embeddings = GoogleGenerativeAIEmbeddings(
-        model="models/embedding-001")  # type: ignore
-
+    embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")  # type: ignore
     new_db = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True) 
-    docs = new_db.similarity_search(user_question)
+
+    # Retrieve documents WITH scores
+    docs_with_scores = new_db.similarity_search_with_score(user_question, k=4)
+    # Separate out the docs from the scores
+    docs = [item[0] for item in docs_with_scores]
+    distances = [item[1] for item in docs_with_scores]
+    
+    # Convert FAISS distances into a "similarity" measure in [0..1] 
+    # (This is a naive conversion; you can customize if you know how your FAISS index calculates distance)
+    similarities = [1 / (1 + d) for d in distances] if distances else [0]
 
     chain = get_conversational_chain()
+    response = chain({"input_documents": docs, "question": user_question},
+                     return_only_outputs=True)
 
-    response = chain(
-        {"input_documents": docs, "question": user_question}, return_only_outputs=True, )
+    # Compute two basic "scoring metrics" from the retrieved docs
+    avg_similarity = sum(similarities) / len(similarities)
+    max_similarity = max(similarities)
 
-    print(response)
-    return response
+    return response, avg_similarity, max_similarity
 
 
 def main():
@@ -116,7 +111,9 @@ def main():
     with st.sidebar:
         st.title("Menu:")
         pdf_docs = st.file_uploader(
-            "Upload your PDF Files and Click on the Submit & Process Button", accept_multiple_files=True)
+            "Upload your PDF Files and Click on the Submit & Process Button", 
+            accept_multiple_files=True
+        )
         if st.button("Submit & Process"):
             with st.spinner("Processing..."):
                 raw_text = get_pdf_text(pdf_docs)
@@ -129,39 +126,41 @@ def main():
     st.write("Welcome to the chat!")
     st.sidebar.button('Clear Chat History', on_click=clear_chat_history)
 
-    # Chat input
-    # Placeholder for chat messages
-
+    # Initialize chat history
     if "messages" not in st.session_state.keys():
         st.session_state.messages = [
             {"role": "assistant", "content": "upload some pdfs and ask me a question"}]
 
+    # Display existing chat messages
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.write(message["content"])
 
+    # Check for user input
     if prompt := st.chat_input():
-        #First list available models
-        # if not list_available_models(api_key):
-        #     st.stop() 
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.write(prompt)
 
-    # Display chat messages and bot response
+    # If the latest message is not from assistant, generate a new response
     if st.session_state.messages[-1]["role"] != "assistant":
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
-                response = user_input(prompt)
+                response, avg_score, max_score = user_input(prompt)
                 placeholder = st.empty()
                 full_response = ''
                 for item in response['output_text']:
                     full_response += item
                     placeholder.markdown(full_response)
                 placeholder.markdown(full_response)
+
         if response is not None:
             message = {"role": "assistant", "content": full_response}
             st.session_state.messages.append(message)
+            # Display the two metrics after the answer
+            st.write("---")
+            st.metric(label="Average Similarity Score", value=round(avg_score, 3))
+            st.metric(label="Max Similarity Score", value=round(max_score, 3))
 
 
 if __name__ == "__main__":
