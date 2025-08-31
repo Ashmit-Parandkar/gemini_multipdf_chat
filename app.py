@@ -158,8 +158,8 @@ def main():
                 raw_output = response.get("output_text", "")
                 if isinstance(raw_output, list):
                     raw_output = "".join(raw_output)
-                avg_score = 0.933
-                max_score = 0.918
+
+                
                 # Stream the text character by character
                 placeholder = st.empty()
                 full_response = ""
